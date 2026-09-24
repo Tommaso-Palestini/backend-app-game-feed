@@ -1,11 +1,11 @@
-# game-feed-backend
+# backend-app-game-feed
 
-Mini backend Node/Express che fa da ponte tra l'app [GameFeedApp](https://github.com/TUO-UTENTE/GameFeedApp)
-e l'API di [IGDB](https://www.igdb.com).
+Mini backend Node/Express per l'app [GameFeedApp](https://github.com/Tommaso-Palestini/GameFeedApp).
 
-Tiene le credenziali IGDB lontane dall'app, traduce generi, piattaforme e modalità
-dall'italiano ai valori di IGDB, calcola la compatibilità dei giochi con le preferenze
-dell'utente e mette in cache le risposte.
+Fa da ponte con l'API di [IGDB](https://www.igdb.com): tiene le credenziali lontane dall'app,
+traduce generi, piattaforme e modalità dall'italiano ai valori di IGDB, calcola la compatibilità
+dei giochi con le preferenze dell'utente e mette in cache le risposte.
+Gestisce inoltre gli account degli utenti, con preferenze e wishlist.
 
 È un backend temporaneo: in futuro l'app si collegherà al backend del progetto full stack.
 
@@ -13,33 +13,47 @@ dell'utente e mette in cache le risposte.
 
 - Node 22 (ES modules, `fetch` integrato, `--env-file` e `--watch`)
 - Express 5
+- `compression` per la compressione gzip
 - API IGDB v4, con autenticazione Twitch (client credentials)
+- `node:crypto` (`scrypt`) per le password
 
 ## Requisiti
 
 - Node 22.11 o superiore
-- Un account Twitch con l'autenticazione a due fattori attiva
-- Un'applicazione registrata su [dev.twitch.tv/console](https://dev.twitch.tv/console)
-  con tipo di client **Riservato** (Confidential), da cui prendere Client ID e Client Secret
+- Credenziali Twitch per l'API IGDB (Client ID e Client Secret), vedi sotto
+
+## Credenziali
+
+Le credenziali **non sono incluse nel repository**: vanno messe in un file `.env`,
+che è escluso da git.
+
+Per ottenerle:
+
+1. Crea un account [Twitch](https://www.twitch.tv) e attiva l'autenticazione a due fattori
+2. Su [dev.twitch.tv/console](https://dev.twitch.tv/console) registra una nuova applicazione:
+   - URL di reindirizzamento OAuth: `http://localhost`
+   - Categoria: `Application Integration`
+   - Tipo di client: **Riservato** (Confidential)
+3. Apri l'applicazione creata, copia il **Client ID** e genera un **Client Secret**
+
+Per la valutazione del progetto, le credenziali possono essere fornite privatamente dall'autore.
 
 ## Installazione
 
 ```bash
-git clone https://github.com/TUO-UTENTE/game-feed-backend.git
-cd game-feed-backend
+git clone https://github.com/Tommaso-Palestini/backend-app-game-feed.git
+cd backend-app-game-feed
 npm install
 cp .env.example .env
 ```
 
-Poi compila `.env` con le tue credenziali:
+Poi compila `.env`:
 
 ```
 TWITCH_CLIENT_ID=il-tuo-client-id
 TWITCH_CLIENT_SECRET=il-tuo-client-secret
 PORT=3000
 ```
-
-Il file `.env` è escluso da git e non va mai caricato nel repository.
 
 ## Avvio
 
@@ -55,13 +69,30 @@ Il server risponde su `http://localhost:3000`.
 Tutti i parametri con più valori si passano separati da virgola,
 per esempio `generi=RPG,Open world`.
 
+### Giochi
+
 | Metodo | Percorso | Descrizione |
 |---|---|---|
 | GET | `/api/health` | Controllo che il server sia attivo |
+| GET | `/api/stats` | Statistiche su cache e tempi di risposta |
 | GET | `/api/games/feed` | Feed a pagine ordinato per compatibilità |
 | GET | `/api/games/random` | 20 giochi casuali |
 | GET | `/api/games/search` | Ricerca con filtri, 30 risultati per pagina |
 | GET | `/api/games/:id` | Dettaglio di un gioco |
+
+### Account
+
+| Metodo | Percorso | Descrizione |
+|---|---|---|
+| POST | `/api/account/registrati` | Crea un account |
+| POST | `/api/account/accedi` | Accesso con email e password |
+| POST | `/api/account/esci` | Chiude la sessione |
+| GET | `/api/account` | Utente, preferenze e wishlist |
+| PUT | `/api/account/preferenze` | Salva le preferenze |
+| PUT | `/api/account/wishlist` | Salva la wishlist |
+
+Registrazione e accesso restituiscono un token di sessione, valido 30 giorni,
+da inviare nelle altre richieste come `Authorization: Bearer <token>`.
 
 ### `/api/games/feed`
 
@@ -114,14 +145,25 @@ Oltre ai campi base restituisce `descrizione`, `sviluppatori`, `votoCritica` e `
 
 `compatibilita` è presente solo nel feed.
 
+## Account e sicurezza
+
+- Gli account sono salvati in `data/db.json`, escluso da git
+- Le password non sono mai salvate in chiaro: viene salvato solo l'hash calcolato con `scrypt`
+  e un salt casuale per ogni utente
+- I dati inviati dall'app vengono validati e ripuliti prima di essere salvati
+- Il file viene scritto in modo sicuro (prima su un file temporaneo, poi rinominato)
+  e le scritture vengono messe in fila per non sovrapporsi
+
 ## Struttura
 
 ```
 src/
-├── server.js       avvio di Express, gestione degli errori
+├── server.js       avvio di Express, compressione, log, gestione degli errori
 ├── giochi.js       endpoint /api/games
+├── account.js      endpoint /api/account: registrazione, accesso, sessioni, dati utente
+├── archivio.js     lettura e scrittura di data/db.json
 ├── mappature.js    traduzione italiano ↔ IGDB e conversione dei giochi
-└── igdb.js         client IGDB: token Twitch, cache, limite di richieste
+└── igdb.js         client IGDB: token Twitch, cache, coda, statistiche
 ```
 
 ## Ottimizzazioni
