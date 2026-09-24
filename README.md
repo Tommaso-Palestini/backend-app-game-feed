@@ -126,11 +126,22 @@ src/
 
 ## Ottimizzazioni
 
-- **Cache in memoria** delle risposte IGDB per 10 minuti (massimo 500 voci)
+- **Cache LRU in memoria** delle risposte IGDB: 10 minuti di validità, massimo 500 voci;
+  quando è piena viene eliminata la voce usata meno di recente
+- **Richieste identiche unite**: se una richiesta uguale è già in corso verso IGDB,
+  la nuova attende la stessa risposta invece di ripetere la chiamata
+- **Compressione gzip** delle risposte JSON
 - **Token Twitch** richiesto una sola volta e rinnovato automaticamente alla scadenza
-- **Limite di 4 richieste al secondo** rispettato mettendo in coda le richieste
+- **Limite di 4 richieste al secondo** verso IGDB rispettato mettendo in coda le richieste
 - **Nuovo tentativo automatico** in caso di token scaduto (401) o troppe richieste (429)
 - **Id di generi, temi e piattaforme** scaricati da IGDB una sola volta all'avvio
+
+### Misurazioni
+
+Ogni richiesta viene registrata nel terminale con il tempo di risposta.
+`GET /api/stats` restituisce il numero di richieste, quante sono state servite dalla cache
+o unite a una già in corso, la percentuale di chiamate a IGDB risparmiate e il tempo medio
+di risposta di IGDB.
 
 ## Crediti
 

@@ -5,6 +5,16 @@ const MASSIMO_ELEMENTI_CACHE = 500;
 const INTERVALLO_MINIMO_MS = 260;
 
 const cache = new Map();
+const inCorso = new Map();
+
+const statistiche = {
+  richieste: 0,
+  daCache: 0,
+  condivise: 0,
+  chiamateIgdb: 0,
+  errori: 0,
+  tempoTotaleIgdbMs: 0,
+};
 
 let token = null;
 let promessaToken = null;
@@ -97,20 +107,76 @@ async function eseguiRichiesta(endpoint, query, puoRiprovare) {
   return risposta.json();
 }
 
+function leggiCache(chiave) {
+  const voce = cache.get(chiave);
+  if (!voce) {
+    return undefined;
+  }
+  if (voce.scadenza <= Date.now()) {
+    cache.delete(chiave);
+    return undefined;
+  }
+  cache.delete(chiave);
+  cache.set(chiave, voce);
+  return voce.dati;
+}
+
+function scriviCache(chiave, dati) {
+  if (cache.has(chiave)) {
+    cache.delete(chiave);
+  } else if (cache.size >= MASSIMO_ELEMENTI_CACHE) {
+    const menoUsata = cache.keys().next().value;
+    cache.delete(menoUsata);
+  }
+  cache.set(chiave, { dati, scadenza: Date.now() + DURATA_CACHE_MS });
+}
+
 export async function chiamaIgdb(endpoint, query) {
-  const chiaveCache = `${endpoint}|${query}`;
-  const inCache = cache.get(chiaveCache);
-  if (inCache && inCache.scadenza > Date.now()) {
-    return inCache.dati;
+  statistiche.richieste += 1;
+  const chiave = `${endpoint}|${query}`;
+
+  const inCache = leggiCache(chiave);
+  if (inCache !== undefined) {
+    statistiche.daCache += 1;
+    return inCache;
   }
 
-  const dati = await eseguiRichiesta(endpoint, query, true);
-
-  if (cache.size >= MASSIMO_ELEMENTI_CACHE) {
-    const piuVecchia = cache.keys().next().value;
-    cache.delete(piuVecchia);
+  const giaInCorso = inCorso.get(chiave);
+  if (giaInCorso) {
+    statistiche.condivise += 1;
+    return giaInCorso;
   }
-  cache.set(chiaveCache, { dati, scadenza: Date.now() + DURATA_CACHE_MS });
 
-  return dati;
+  const promessa = (async () => {
+    const inizio = performance.now();
+    statistiche.chiamateIgdb += 1;
+    try {
+      const dati = await eseguiRichiesta(endpoint, query, true);
+      scriviCache(chiave, dati);
+      return dati;
+    } catch (errore) {
+      statistiche.errori += 1;
+      throw errore;
+    } finally {
+      statistiche.tempoTotaleIgdbMs += performance.now() - inizio;
+      inCorso.delete(chiave);
+    }
+  })();
+
+  inCorso.set(chiave, promessa);
+  return promessa;
+}
+
+export function getStatistiche() {
+  const { richieste, daCache, condivise, chiamateIgdb, errori, tempoTotaleIgdbMs } = statistiche;
+  return {
+    richieste,
+    daCache,
+    condivise,
+    chiamateIgdb,
+    errori,
+    percentualeRisparmiata: richieste > 0 ? Math.round(((daCache + condivise) / richieste) * 100) : 0,
+    tempoMedioIgdbMs: chiamateIgdb > 0 ? Math.round(tempoTotaleIgdbMs / chiamateIgdb) : 0,
+    elementiInCache: cache.size,
+  };
 }
