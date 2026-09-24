@@ -185,6 +185,22 @@ Ogni richiesta viene registrata nel terminale con il tempo di risposta.
 o unite a una già in corso, la percentuale di chiamate a IGDB risparmiate e il tempo medio
 di risposta di IGDB.
 
+## Sviluppi futuri
+
+- Database al posto del file JSON e hosting online del server
+- Recupero della password via email
+- Limite di tentativi di accesso per proteggere gli account
+- Cache condivisa (per esempio Redis) per più istanze del server
+
+## Riferimenti
+
+- [Express 5](https://expressjs.com)
+- [Node.js – crypto.scrypt](https://nodejs.org/api/crypto.html#cryptoscryptpassword-salt-keylen-options-callback)
+- [Node.js – opzione --env-file](https://nodejs.org/api/cli.html#--env-fileconfig)
+- [compression](https://github.com/expressjs/compression)
+- [IGDB API](https://api-docs.igdb.com)
+- [Twitch Developer Console](https://dev.twitch.tv/console)
+
 ## Crediti
 
 Dati dei giochi forniti da [IGDB](https://www.igdb.com), uso non commerciale
